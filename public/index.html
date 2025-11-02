@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Socket Chat</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      margin: 0;
+      background: #f2f2f2;
+    }
+
+    #chat {
+      flex: 1;
+      padding: 10px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #inputArea {
+      display: flex;
+      border-top: 1px solid #ccc;
+      background: #fff;
+    }
+
+    input {
+      flex: 1;
+      padding: 10px;
+      font-size: 16px;
+      border: none;
+      outline: none;
+    }
+
+    button {
+      padding: 10px 20px;
+      background: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #0056b3;
+    }
+
+    .message {
+      max-width: 70%;
+      padding: 10px;
+      border-radius: 12px;
+      margin: 6px 0;
+      word-wrap: break-word;
+    }
+
+    /* Bot (left) */
+    .bot {
+      align-self: flex-start;
+      background: #e3f2fd;
+      color: #000;
+      border-top-left-radius: 0;
+    }
+
+    /* User (right) */
+    .user {
+      align-self: flex-end;
+      background: #dcf8c6;
+      color: #000;
+      border-top-right-radius: 0;
+    }
+
+    .buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 5px;
+    }
+
+    .buttons button {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .buttons button:hover {
+      background: #0056b3;
+    }
+
+    details {
+      margin-top: 5px;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 6px;
+      width: fit-content;
+    }
+
+    summary {
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    label {
+      display: block;
+      margin: 5px 0;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="chat"></div>
+
+  <div id="inputArea">
+    <input id="messageInput" placeholder="Type message ID (1,2,3)" />
+    <button id="sendBtn">Send</button>
+  </div>
+
+  <script>
+    const socket = io();
+    const chat = document.getElementById('chat');
+    const input = document.getElementById('messageInput');
+    const sendBtn = document.getElementById('sendBtn');
+
+    // Send user message
+    sendBtn.onclick = () => {
+      const msg = input.value.trim();
+      if (!msg) return;
+      appendMessage(msg, 'user');
+      socket.emit('user_message', { id: msg, type: 'text', payload: msg });
+      input.value = '';
+    };
+
+    // Receive bot message
+    socket.on('bot_message', (data) => {
+      if (data.message_type === 'text') {
+        appendMessage(data.message, 'bot');
+      } 
+      else if (data.message_type === 'reply_button') {
+        appendMessage(data.message, 'bot');
+        const div = document.createElement('div');
+        div.className = 'buttons bot';
+        data.actions.forEach(btn => {
+          const button = document.createElement('button');
+          button.textContent = btn.title;
+          button.onclick = () => handleUserAction(btn.id);
+          div.appendChild(button);
+        });
+        chat.appendChild(div);
+      } 
+      else if (data.message_type === 'list') {
+        appendMessage(data.message, 'bot');
+        const dropdown = document.createElement('details');
+        dropdown.className = 'bot';
+        const summary = document.createElement('summary');
+        summary.textContent = 'Choose an option';
+        dropdown.appendChild(summary);
+
+        const form = document.createElement('form');
+        data.actions.forEach((item) => {
+          const label = document.createElement('label');
+          const radio = document.createElement('input');
+          radio.type = 'radio';
+          radio.name = 'list_option';
+          radio.value = item.id;
+          radio.onclick = () => {
+            handleUserAction(item.id);
+            dropdown.open = false; // close after selecting
+          };
+          label.appendChild(radio);
+          label.appendChild(document.createTextNode(' ' + item.title));
+          form.appendChild(label);
+        });
+
+        dropdown.appendChild(form);
+        chat.appendChild(dropdown);
+      }
+
+      scrollBottom();
+    });
+
+    // Handle button or list click
+    function handleUserAction(payload) {
+      appendMessage(`You selected: ${payload}`, 'user');
+      socket.emit('user_message', { id: payload, type: 'button', payload });
+    }
+
+    // Append message to chat
+    function appendMessage(text, cls) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      div.className = `message ${cls}`;
+      chat.appendChild(div);
+      scrollBottom();
+    }
+
+    function scrollBottom() {
+      chat.scrollTop = chat.scrollHeight;
+    }
+  </script>
+</body>
+</html>
